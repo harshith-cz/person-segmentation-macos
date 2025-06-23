@@ -11,13 +11,20 @@ struct CameraView: View {
     @State private var cameraManager: CameraManager = CameraManager()
     var body: some View {
         VStack {
-//            CameraPreviewView(session: cameraManager.captureSession)
-//                .frame(width: 320, height: 240)
-//                .clipShape(Circle())
-//                .padding()
+            if let processedImage = cameraManager.processedImage {
+                Image(nsImage: processedImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 320, height: 240)
+                    .clipShape(Circle())
+                    .padding()
+            }
         }
         .task {
             await cameraManager.initialize()
+        }
+        .onDisappear {
+            cameraManager.stopSession()
         }
     }
 }

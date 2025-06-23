@@ -8,23 +8,43 @@
 import SwiftUI
 import AVFoundation
 import AppKit
+import Vision
+import CoreImage.CIFilterBuiltins
 
+enum Background {
+    case solid, image
+}
 @Observable
 final class CameraManager: NSObject {
     let captureSession: AVCaptureSession = AVCaptureSession()
-    private var movieOutput = AVCaptureMovieFileOutput()
     private var videoInput: AVCaptureDeviceInput?
+    private let videoQueue = DispatchQueue(label: "videoQueue", qos: .userInitiated)
+    private let videoOutput = AVCaptureVideoDataOutput()
+    private let ciContext = CIContext()
+    private var selectedBackground: Background = .solid
     
     var isSessionRunning: Bool = false
     var isRecording: Bool = false
     var permissionGranted: Bool = false
-    var lastRecordingURL: URL?
+    var processedImage: NSImage?
+    
+    private let personSegmentationRequest: VNGeneratePersonSegmentationRequest = {
+        let request = VNGeneratePersonSegmentationRequest()
+        request.qualityLevel = .balanced
+        request.outputPixelFormat = kCVPixelFormatType_OneComponent8
+        return request
+    }()
     
     func initialize() async {
         await requestPermission()
         if permissionGranted {
             await setupCameraSession()
         }
+    }
+    
+    func stopSession() {
+        captureSession.stopRunning()
+        isSessionRunning = false
     }
     
     @MainActor
@@ -41,7 +61,7 @@ final class CameraManager: NSObject {
         captureSession.beginConfiguration()
         captureSession.sessionPreset = .high
         await setupVideoInput()
-        setupMovieOutput()
+        setupVideoOutput()
         captureSession.commitConfiguration()
         await MainActor.run {
             startSession()
@@ -63,13 +83,21 @@ final class CameraManager: NSObject {
         }
     }
     
-    private func setupMovieOutput() {
-        if captureSession.canAddOutput(movieOutput) {
-            captureSession.addOutput(movieOutput)
+    private func setupVideoOutput() {
+        videoOutput.setSampleBufferDelegate(self, queue: videoQueue)
+        videoOutput.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        ]
+        
+        if captureSession.canAddOutput(videoOutput) {
+            captureSession.addOutput(videoOutput)
             
-            if let connection = movieOutput.connection(with: .video) {
+            if let connection = videoOutput.connection(with: .video) {
                 if connection.isVideoMirroringSupported {
                     connection.isVideoMirrored = true
+                }
+                if connection.isVideoOrientationSupported {
+                    connection.videoOrientation = .portrait
                 }
             }
         }
@@ -82,25 +110,89 @@ final class CameraManager: NSObject {
             isSessionRunning = captureSession.isRunning
         }
     }
+    
+    private func processPersonSegmentation(pixelBuffer: CVPixelBuffer) {
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
+        
+        do {
+            try handler.perform([personSegmentationRequest])
+            
+            guard let maskObservation = personSegmentationRequest.results?.first else { return }
+            
+            let maskPixelBuffer = maskObservation.pixelBuffer
+            let originalImage = CIImage(cvPixelBuffer: pixelBuffer)
+            
+            let segmentedImage = applyPersonSegmentation(
+                originalImage: originalImage,
+                maskPixelBuffer: maskPixelBuffer
+            )
+            
+            if let cgImage = ciContext.createCGImage(segmentedImage, from: segmentedImage.extent) {
+                let nsImage = NSImage(cgImage: cgImage, size: CGSize(width: cgImage.width, height: cgImage.height))
+                
+                DispatchQueue.main.async { [weak self] in
+                    self?.processedImage = nsImage
+                }
+            }
+        } catch {
+            print("Error performing person segmentation: \(error)")
+        }
+    }
+    
+    private func applyPersonSegmentation(originalImage: CIImage, maskPixelBuffer: CVPixelBuffer) -> CIImage {
+        let maskImage = CIImage(cvPixelBuffer: maskPixelBuffer)
+        
+        let scaleX = originalImage.extent.width / maskImage.extent.width
+        let scaleY = originalImage.extent.height / maskImage.extent.height
+        let scaledMask = maskImage.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+        
+        let blendFilter = CIFilter.blendWithMask()
+        blendFilter.inputImage = originalImage
+        blendFilter.backgroundImage = createSolidBackground(color: .blue, size: originalImage.extent.size)
+        blendFilter.maskImage = scaledMask
+        
+        return blendFilter.outputImage ?? originalImage
+    }
+    
+    private func createSolidBackground(color: NSColor, size: CGSize) -> CIImage {
+        let ciColor = CIColor(color: color) ?? CIColor.black
+        return CIImage(color: ciColor).cropped(to: CGRect(origin: .zero, size: size))
+    }
+    
+    private func createCustomImageBackground(size: CGSize) -> CIImage {
+        CIImage(color: .yellow) //TODO: yet to implement image background
+    }
+    
+//    @MainActor
+//    func changeBackground(to type: BackgroundType) {
+//        selectedBackground = type
+//    }
 }
 
-//struct CameraPreviewView: NSViewRepresentable {
-//    let session: AVCaptureSession
-//    
-//    func makeNSView(context: Context) -> NSView {
-//        let view = NSView()
-//        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-//        previewLayer.videoGravity = .resizeAspectFill
-//        
-//        view.layer = previewLayer
-//        view.wantsLayer = true
-//        return view
-//    }
-//    
-//    func updateNSView(_ nsView: NSView, context: Context) {
-//        guard let previewLayer = nsView.layer as? AVCaptureVideoPreviewLayer else {
-//            return 
-//        }
-//        previewLayer.frame = nsView.bounds
-//    }
-//}
+struct CameraPreviewView: NSViewRepresentable {
+    let session: AVCaptureSession
+    
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
+        previewLayer.videoGravity = .resizeAspectFill
+        
+        view.layer = previewLayer
+        view.wantsLayer = true
+        return view
+    }
+    
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let previewLayer = nsView.layer as? AVCaptureVideoPreviewLayer else {
+            return 
+        }
+        previewLayer.frame = nsView.bounds
+    }
+}
+
+extension CameraManager : AVCaptureVideoDataOutputSampleBufferDelegate {
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        processPersonSegmentation(pixelBuffer: pixelBuffer)
+    }
+}
