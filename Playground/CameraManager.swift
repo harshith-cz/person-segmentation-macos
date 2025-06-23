@@ -18,7 +18,7 @@ enum Background {
 final class CameraManager: NSObject {
     let captureSession: AVCaptureSession = AVCaptureSession()
     private var videoInput: AVCaptureDeviceInput?
-    private let videoQueue = DispatchQueue(label: "videoQueue", qos: .userInitiated)
+    private let videoQueue = DispatchQueue(label: "videoQueue", qos: .default)
     private let videoOutput = AVCaptureVideoDataOutput()
     private let ciContext = CIContext()
     private var selectedBackground: Background = .solid
@@ -96,9 +96,6 @@ final class CameraManager: NSObject {
                 if connection.isVideoMirroringSupported {
                     connection.isVideoMirrored = true
                 }
-                if connection.isVideoOrientationSupported {
-                    connection.videoOrientation = .portrait
-                }
             }
         }
     }
@@ -167,27 +164,6 @@ final class CameraManager: NSObject {
 //    func changeBackground(to type: BackgroundType) {
 //        selectedBackground = type
 //    }
-}
-
-struct CameraPreviewView: NSViewRepresentable {
-    let session: AVCaptureSession
-    
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-        previewLayer.videoGravity = .resizeAspectFill
-        
-        view.layer = previewLayer
-        view.wantsLayer = true
-        return view
-    }
-    
-    func updateNSView(_ nsView: NSView, context: Context) {
-        guard let previewLayer = nsView.layer as? AVCaptureVideoPreviewLayer else {
-            return 
-        }
-        previewLayer.frame = nsView.bounds
-    }
 }
 
 extension CameraManager : AVCaptureVideoDataOutputSampleBufferDelegate {
