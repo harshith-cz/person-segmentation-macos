@@ -11,10 +11,10 @@ struct CameraView: View {
     @State private var cameraManager: CameraManager = CameraManager()
     var body: some View {
         VStack {
-            CameraPreviewView(session: cameraManager.captureSession)
-                .frame(width: 320, height: 240)
-                .clipShape(Circle())
-                .padding()
+//            CameraPreviewView(session: cameraManager.captureSession)
+//                .frame(width: 320, height: 240)
+//                .clipShape(Circle())
+//                .padding()
         }
         .task {
             await cameraManager.initialize()
