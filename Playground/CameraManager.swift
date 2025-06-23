@@ -27,7 +27,6 @@ final class CameraManager: NSObject {
         }
     }
     
-    
     @MainActor
     private func requestPermission() async {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
@@ -47,12 +46,10 @@ final class CameraManager: NSObject {
         await MainActor.run {
             startSession()
         }
-        
     }
     
     private func setupVideoInput() async {
         guard let frontCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
-            print("No camera available")
             return
         }
         do {
@@ -78,6 +75,7 @@ final class CameraManager: NSObject {
         }
     }
     
+    @MainActor
     private func startSession() {
         Task {
             captureSession.startRunning()
@@ -86,20 +84,23 @@ final class CameraManager: NSObject {
     }
 }
 
-
 struct CameraPreviewView: NSViewRepresentable {
     let session: AVCaptureSession
     
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
+        previewLayer.videoGravity = .resizeAspectFill
+        
         view.layer = previewLayer
         view.wantsLayer = true
         return view
     }
     
     func updateNSView(_ nsView: NSView, context: Context) {
-        guard let previewLayer = nsView.layer as? AVCaptureVideoPreviewLayer else { return }
+        guard let previewLayer = nsView.layer as? AVCaptureVideoPreviewLayer else {
+            return 
+        }
         previewLayer.frame = nsView.bounds
     }
 }
