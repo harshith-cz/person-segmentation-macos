@@ -26,7 +26,7 @@ final class CameraManager: NSObject {
     var isSessionRunning: Bool = false
     var isRecording: Bool = false
     var permissionGranted: Bool = false
-    var processedImage: CGImage?
+    var processedImage: CIImage?
     
     private let personSegmentationRequest: VNGeneratePersonSegmentationRequest = {
         let request = VNGeneratePersonSegmentationRequest()
@@ -119,19 +119,22 @@ final class CameraManager: NSObject {
             let maskPixelBuffer = maskObservation.pixelBuffer
             let originalImage = CIImage(cvPixelBuffer: pixelBuffer)
             
+            let startTime = Date()
+            
             let segmentedImage = applyPersonSegmentation(
                 originalImage: originalImage,
                 maskPixelBuffer: maskPixelBuffer
             )
-            
-            let startTime = Date()
-            
-            let extent = segmentedImage.extent
-            guard !extent.isInfinite else { return }
-            let cgImage = ciContext.createCGImage(segmentedImage, from: extent)
             DispatchQueue.main.async { [weak self] in
-                self?.processedImage = cgImage
+                self?.processedImage = segmentedImage
             }
+            
+//            let extent = segmentedImage.extent
+//            guard !extent.isInfinite else { return }
+//            let cgImage = ciContext.createCGImage(segmentedImage, from: extent)
+//            DispatchQueue.main.async { [weak self] in
+//                self?.processedImage = cgImage
+//            }
             let endTime = Date()
             let duration = endTime.timeIntervalSince(startTime)
             print(duration)
