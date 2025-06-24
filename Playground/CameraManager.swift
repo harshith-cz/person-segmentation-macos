@@ -26,7 +26,7 @@ final class CameraManager: NSObject {
     var isSessionRunning: Bool = false
     var isRecording: Bool = false
     var permissionGranted: Bool = false
-    var processedImage: NSImage?
+    var processedImage: CGImage?
     
     private let personSegmentationRequest: VNGeneratePersonSegmentationRequest = {
         let request = VNGeneratePersonSegmentationRequest()
@@ -124,13 +124,18 @@ final class CameraManager: NSObject {
                 maskPixelBuffer: maskPixelBuffer
             )
             
-            if let cgImage = ciContext.createCGImage(segmentedImage, from: segmentedImage.extent) {
-                let nsImage = NSImage(cgImage: cgImage, size: CGSize(width: cgImage.width, height: cgImage.height))
-                
-                DispatchQueue.main.async { [weak self] in
-                    self?.processedImage = nsImage
-                }
+            let startTime = Date()
+            
+            let extent = segmentedImage.extent
+            guard !extent.isInfinite else { return }
+            let cgImage = ciContext.createCGImage(segmentedImage, from: extent)
+            DispatchQueue.main.async { [weak self] in
+                self?.processedImage = cgImage
             }
+            let endTime = Date()
+            let duration = endTime.timeIntervalSince(startTime)
+            print(duration)
+            //ci context from view
         } catch {
             print("Error performing person segmentation: \(error)")
         }

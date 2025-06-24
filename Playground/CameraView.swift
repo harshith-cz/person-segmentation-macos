@@ -11,8 +11,8 @@ struct CameraView: View {
     @State private var cameraManager: CameraManager = CameraManager()
     var body: some View {
         VStack {
-            if let processedImage = cameraManager.processedImage {
-                Image(nsImage: processedImage)
+            if let cgImage = cameraManager.processedImage {
+                Image(decorative: cgImage, scale: 1.0)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: 320, height: 240)
