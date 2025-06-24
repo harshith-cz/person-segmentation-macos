@@ -153,7 +153,7 @@ final class CameraManager: NSObject {
         
         let blendFilter = CIFilter.blendWithMask()
         blendFilter.inputImage = originalImage
-        blendFilter.backgroundImage = createSolidBackground(color: .blue, size: originalImage.extent.size)
+        blendFilter.backgroundImage = createSolidBackground(color: .orange, size: originalImage.extent.size)
         blendFilter.maskImage = scaledMask
         
         return blendFilter.outputImage ?? originalImage

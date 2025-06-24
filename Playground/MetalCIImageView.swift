@@ -50,7 +50,10 @@ struct CIImageView: NSViewRepresentable {
             let drawableSize = view.drawableSize
             let scaleX = drawableSize.width / image.extent.width
             let scaleY = drawableSize.height / image.extent.height
-            let scale = min(scaleX, scaleY)
+            let minScale = min(scaleX, scaleY)
+            let maxScale = max(scaleX, scaleY)
+            let cropFactor: CGFloat = 0.5
+            let scale = minScale + (maxScale - minScale) * cropFactor
 
             let scaled = image.transformed(by: .init(scaleX: scale, y: scale))
             let centered = scaled.transformed(by: .init(
